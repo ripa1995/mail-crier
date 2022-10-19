@@ -2,9 +2,11 @@ package backend
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"net/smtp"
 	"os"
+	"net"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -27,8 +29,7 @@ type Backend struct {
 	mongoDatabase *mongo.Database
 }
 
-//TODO: Backend initialization
-func Init(ctx context.Context) (Backend, error) {
+func InitBackend(ctx context.Context) (Backend, error) {
 	smtpConfig := loadSMTPConfig()
 	mongoConfig := loadMongoConfig()
 
@@ -54,10 +55,14 @@ func (backend *Backend) Terminate(ctx context.Context) {
 func initSMTPAuth(smtpConfig SMTPConfig) (*smtp.Auth, error) {
 	auth := smtp.PlainAuth("", smtpConfig.Username, smtpConfig.Password, smtpConfig.Hostname)
 
-	client, err := smtp.Dial(smtpConfig.Hostname+":"+smtpConfig.TLSPort)
+	address := smtpConfig.Hostname+":"+smtpConfig.TLSPort
+	client, err := smtp.Dial(address)
 	if err != nil {
 		return nil, err
 	}
+
+	host, _, _ := net.SplitHostPort(address)
+	_ = client.StartTLS(&tls.Config{ServerName: host})
 
 	err = client.Auth(auth)
 	if err != nil {
