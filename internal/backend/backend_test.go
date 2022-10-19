@@ -2,8 +2,8 @@ package backend
 
 import (
 	"context"
-	"testing"
 	"github.com/joho/godotenv"
+	"testing"
 )
 
 func initEnvVar(t *testing.T) {

@@ -4,9 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"log"
+	"net"
 	"net/smtp"
 	"os"
-	"net"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -16,16 +16,16 @@ type SMTPConfig struct {
 	Username string
 	Password string
 	Hostname string
-	TLSPort string
+	TLSPort  string
 }
 
 type MongoConfig struct {
 	ConnectionURI string
-	DatabaseName string
+	DatabaseName  string
 }
 
 type Backend struct {
-	smtpAuth *smtp.Auth
+	smtpAuth      *smtp.Auth
 	mongoDatabase *mongo.Database
 }
 
@@ -55,7 +55,7 @@ func (backend *Backend) Terminate(ctx context.Context) {
 func initSMTPAuth(smtpConfig SMTPConfig) (*smtp.Auth, error) {
 	auth := smtp.PlainAuth("", smtpConfig.Username, smtpConfig.Password, smtpConfig.Hostname)
 
-	address := smtpConfig.Hostname+":"+smtpConfig.TLSPort
+	address := smtpConfig.Hostname + ":" + smtpConfig.TLSPort
 	client, err := smtp.Dial(address)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func initSMTPAuth(smtpConfig SMTPConfig) (*smtp.Auth, error) {
 	}
 
 	defer client.Close()
-	
+
 	return &auth, nil
 }
 
@@ -81,7 +81,7 @@ func initMongoDatabase(ctx context.Context, mongoConfig MongoConfig) (*mongo.Dat
 	}
 
 	database := client.Database(mongoConfig.DatabaseName)
-	
+
 	return database, nil
 }
 
