@@ -134,7 +134,7 @@ func (m Subscriber) Delete(ctx context.Context, db *mongo.Database) (int64, erro
 	return deleteRes.DeletedCount, nil
 }
 
-func InitCollections(ctx context.Context, db *mongo.Database) error {
+func InitDatabaseCollections(ctx context.Context, db *mongo.Database) error {
 	names, err := db.ListCollectionNames(ctx, nil)
 
 	if err != nil {

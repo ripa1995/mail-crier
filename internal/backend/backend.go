@@ -33,12 +33,17 @@ func InitBackend(ctx context.Context) (Backend, error) {
 	smtpConfig := loadSMTPConfig()
 	mongoConfig := loadMongoConfig()
 
-	database, err := initMongoDatabase(ctx, mongoConfig)
+	database, err := initMongoDatabaseConnection(ctx, mongoConfig)
 	if err != nil {
 		return Backend{}, err
 	}
 
 	auth, err := initSMTPAuth(smtpConfig)
+	if err != nil {
+		return Backend{}, err
+	}
+
+	err = InitDatabaseCollections(ctx, database)
 	if err != nil {
 		return Backend{}, err
 	}
@@ -74,7 +79,7 @@ func initSMTPAuth(smtpConfig SMTPConfig) (*smtp.Auth, error) {
 	return &auth, nil
 }
 
-func initMongoDatabase(ctx context.Context, mongoConfig MongoConfig) (*mongo.Database, error) {
+func initMongoDatabaseConnection(ctx context.Context, mongoConfig MongoConfig) (*mongo.Database, error) {
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoConfig.ConnectionURI))
 	if err != nil {
 		return nil, err
