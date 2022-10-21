@@ -12,6 +12,11 @@ import (
 const mailingListCollection string = "mailing-list"
 const subscriberCollection string = "subscriber"
 
+type Store interface {
+	Insert(ctx context.Context, db *mongo.Database) error
+	Delete(ctx context.Context, db *mongo.Database) (int64, error)
+}
+
 type MailingList struct {
 	DisplayName   string `bson:"display_name"`
 	Topic         string
@@ -39,14 +44,15 @@ func (m MailingList) Delete(ctx context.Context, db *mongo.Database) (int64, err
 }
 
 type Subscription struct {
-	SubscriberEmail  string    `bson:"subscriber_email"`
-	SubscriptionDate time.Time `bson:"subscription_date"`
+	mailingListDisplayName string    `bson:"omitempty"`
+	SubscriberEmail        string    `bson:"subscriber_email"`
+	SubscriptionDate       time.Time `bson:"subscription_date"`
 }
 
-func (m Subscription) Insert(ctx context.Context, db *mongo.Database, mailingListDisplayName string) error {
+func (m Subscription) Insert(ctx context.Context, db *mongo.Database) error {
 	var ml MailingList
 	coll := db.Collection(mailingListCollection)
-	filter := bson.D{{Key: "display_name", Value: mailingListDisplayName}}
+	filter := bson.D{{Key: "display_name", Value: m.mailingListDisplayName}}
 
 	//search for mailing list with given name
 	err := coll.FindOne(ctx, filter).Decode(&ml)
@@ -73,6 +79,22 @@ func (m Subscription) Insert(ctx context.Context, db *mongo.Database, mailingLis
 	return nil
 }
 
+func (m Subscription) Delete(ctx context.Context, db *mongo.Database) (int64, error) {
+	//find subscription to be deleted
+	coll := db.Collection(mailingListCollection)
+	//filter on mailing list finding the one from which the subscription must be deleted
+	filter := bson.D{{Key: "display_name", Value: m.mailingListDisplayName}}
+	//remove operation from the array of subscriptions
+	update := bson.D{{Key: "$pull", Value: bson.D{{Key: "subscriptions", Value: bson.D{{Key: "$elemMatch", Value: bson.D{{Key: "subscriber_email", Value: m.SubscriberEmail}}}}}}}}
+
+	updateRes, err := coll.UpdateMany(ctx, filter, update)
+	if err != nil {
+		return 0, err
+	}
+
+	return updateRes.ModifiedCount, nil
+}
+
 type Subscriber struct {
 	Name        string `bson:"omitempty"`
 	Surname     string `bson:"omitempty"`
@@ -86,7 +108,7 @@ func (m Subscriber) Insert(ctx context.Context, db *mongo.Database) error {
 	return err
 }
 
-func (m Subscriber) Delete(ctx context.Context, db *mongo.Database) (int64, int64, int64, error) {
+func (m Subscriber) Delete(ctx context.Context, db *mongo.Database) (int64, error) {
 	//filter on email
 	filter := bson.D{{Key: "email", Value: bson.D{{Key: "$eq", Value: m.Email}}}}
 	opts := options.Delete().SetHint(bson.D{{Key: "email", Value: 1}})
@@ -94,7 +116,7 @@ func (m Subscriber) Delete(ctx context.Context, db *mongo.Database) (int64, int6
 
 	deleteRes, err := coll.DeleteOne(ctx, filter, opts)
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, err
 	}
 
 	//find subscription to be deleted
@@ -104,12 +126,12 @@ func (m Subscriber) Delete(ctx context.Context, db *mongo.Database) (int64, int6
 	//remove operation from the array of subscriptions
 	update := bson.D{{Key: "$pull", Value: bson.D{{Key: "subscriptions", Value: bson.D{{Key: "$elemMatch", Value: bson.D{{Key: "subscriber_email", Value: m.Email}}}}}}}}
 
-	updateRes, err := coll.UpdateMany(ctx, filter, update)
+	_, err = coll.UpdateMany(ctx, filter, update)
 	if err != nil {
-		return deleteRes.DeletedCount, 0, 0, err
+		return deleteRes.DeletedCount, err
 	}
 
-	return deleteRes.DeletedCount, updateRes.MatchedCount, updateRes.ModifiedCount, nil
+	return deleteRes.DeletedCount, nil
 }
 
 func InitCollections(ctx context.Context, db *mongo.Database) error {
