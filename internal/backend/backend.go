@@ -43,7 +43,7 @@ func InitBackend(ctx context.Context) (Backend, error) {
 		return Backend{}, err
 	}
 
-	err = InitDatabaseCollections(ctx, database)
+	err = initDatabaseCollections(ctx, database)
 	if err != nil {
 		return Backend{}, err
 	}
