@@ -12,9 +12,9 @@ import (
 const mailingListCollection string = "mailing-list"
 const subscriberCollection string = "subscriber"
 
-type AlreadySubscribedError struct {}
+type AlreadySubscribedError struct{}
 
-func (e *AlreadySubscribedError)Error() string {
+func (e *AlreadySubscribedError) Error() string {
 	return "Already Subscribed."
 }
 
@@ -26,7 +26,7 @@ type Store interface {
 type MailingList struct {
 	DisplayName   string `bson:"display_name"`
 	Topic         string
-	Subscriptions []Subscription 
+	Subscriptions []Subscription
 }
 
 func (m MailingList) Insert(ctx context.Context, db *mongo.Database) error {
@@ -50,30 +50,26 @@ func (m MailingList) Delete(ctx context.Context, db *mongo.Database) (int64, err
 }
 
 type Subscription struct {
-	mailingListDisplayName string    
+	mailingListDisplayName string
 	SubscriberEmail        string    `bson:"subscriber_email"`
 	SubscriptionDate       time.Time `bson:"subscription_date"`
 }
 
 func (m Subscription) Insert(ctx context.Context, db *mongo.Database) error {
-	var subs[]Subscription 
-	ml := MailingList{Subscriptions: subs}
-	coll := db.Collection(mailingListCollection)
-	filter := bson.D{{Key: "display_name", Value: m.mailingListDisplayName}}
-
-	//search for mailing list with given name
-	err := coll.FindOne(ctx, filter).Decode(&ml)
+	ml, err := GetMailingList(ctx, db, m.mailingListDisplayName)
 	if err != nil {
 		//if ==ErrNoDocumnts, no mailing list with display_name has been found
 		return err
 	}
+
 	//search if ml contains m, if so no need to add the subscription
 	for i := 0; i < len(ml.Subscriptions); i++ {
 		if ml.Subscriptions[i].SubscriberEmail == m.SubscriberEmail {
 			return &AlreadySubscribedError{}
 		}
 	}
-
+	coll := db.Collection(mailingListCollection)
+	filter := bson.D{{Key: "display_name", Value: m.mailingListDisplayName}}
 	//append subscription info the mailing list subscriptions array
 	update := bson.D{{Key: "$push", Value: bson.D{{Key: "subscriptions", Value: bson.D{{Key: "subscriber_email", Value: m.SubscriberEmail}, {Key: "subscription_date", Value: m.SubscriptionDate}}}}}}
 
@@ -91,7 +87,7 @@ func (m Subscription) Delete(ctx context.Context, db *mongo.Database) (int64, er
 	//filter on mailing list finding the one from which the subscription must be deleted
 	filter := bson.D{{Key: "display_name", Value: m.mailingListDisplayName}}
 	//remove operation from the array of subscriptions
-	update := bson.D{{Key: "$pull", Value: bson.D{{Key: "subscriptions",  Value: bson.D{{Key: "subscriber_email", Value: m.SubscriberEmail}}}}}}
+	update := bson.D{{Key: "$pull", Value: bson.D{{Key: "subscriptions", Value: bson.D{{Key: "subscriber_email", Value: m.SubscriberEmail}}}}}}
 
 	updateRes, err := coll.UpdateMany(ctx, filter, update)
 	if err != nil {
@@ -102,8 +98,8 @@ func (m Subscription) Delete(ctx context.Context, db *mongo.Database) (int64, er
 }
 
 type Subscriber struct {
-	Name        string 
-	Surname     string 
+	Name        string
+	Surname     string
 	DisplayName string `bson:"display_name"`
 	Email       string
 }
@@ -138,6 +134,47 @@ func (m Subscriber) Delete(ctx context.Context, db *mongo.Database) (int64, erro
 	}
 
 	return deleteRes.DeletedCount, nil
+}
+
+func (m Subscriber) GetUserSubscriptions(ctx context.Context, db *mongo.Database) ([]MailingList, error) {
+	var ml []MailingList
+	coll := db.Collection(mailingListCollection)
+	filter := bson.D{{Key: "subscriptions", Value: bson.D{{Key: "$elemMatch", Value: bson.D{{Key: "subscriber_email", Value: m.Email}}}}}}
+	projection := bson.D{{Key: "display_name", Value: 1}, {Key: "topic", Value: 1}, {Key: "subscriptions", Value: bson.D{{Key: "$elemMatch", Value: bson.D{{Key: "subscriber_email", Value: m.Email}}}}}}
+	//search for mailing list
+	cursor, err := coll.Find(ctx, filter, options.Find().SetProjection(projection))
+	//if ==ErrNoDocumnts, no mailing list has been found
+	if err != nil {
+		return ml, err
+	}
+	err = cursor.All(ctx, &ml)
+	return ml, err
+}
+
+func GetAllMailingList(ctx context.Context, db *mongo.Database) ([]MailingList, error) {
+	var ml []MailingList
+	coll := db.Collection(mailingListCollection)
+	filter := bson.D{{}}
+
+	//search for mailing list with given name
+	cursor, err := coll.Find(ctx, filter)
+	//if ==ErrNoDocumnts, no mailing list with display_name has been found
+	if err != nil {
+		return ml, err
+	}
+	err = cursor.All(ctx, &ml)
+	return ml, err
+}
+
+func GetMailingList(ctx context.Context, db *mongo.Database, displayName string) (MailingList, error) {
+	var ml MailingList
+	coll := db.Collection(mailingListCollection)
+	filter := bson.D{{Key: "display_name", Value: displayName}}
+
+	//search for mailing list with given name
+	err := coll.FindOne(ctx, filter).Decode(&ml)
+	//if ==ErrNoDocumnts, no mailing list with display_name has been found
+	return ml, err
 }
 
 func initDatabaseCollections(ctx context.Context, db *mongo.Database) error {
